@@ -23,8 +23,15 @@ model User {
   address     String?
   cin         String?  @unique
   role        UserRole
-  CNOM        String?
+  CNOM        String?  @unique
   coinBalance Float    @default(0)
+  
+
+  is2FAEnabled Boolean @default(false)
+  twoFASecret String?
+
+
+  refreshToken String?
 
   patient Patient?
   doctor  Doctor?

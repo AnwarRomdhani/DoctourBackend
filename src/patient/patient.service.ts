@@ -67,7 +67,7 @@ export class PatientService {
             },
         });
     }
-    async updatePatient(patientId: number, data: Partial<{firstname: string; lastname: string; address: string}>) {
+    async updatePatient(patientId: number, data: Partial<{firstName: string; lastName: string; address: string}>) {
         return this.prisma.user.update({
             where: { id: patientId },
             data,

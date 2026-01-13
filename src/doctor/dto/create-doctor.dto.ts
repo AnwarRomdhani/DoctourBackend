@@ -1,7 +1,7 @@
 import {IsEmail,IsNotEmpty,IsOptional,Matches,MinLength} from 'class-validator';
 
 
-export class CreatePatientDto {
+export class CreateDoctorDto {
     @IsEmail({},{message:'Invalid email format'})
     email: string;
 
@@ -12,6 +12,10 @@ export class CreatePatientDto {
     @IsNotEmpty({message:'Phone Number is required'})
     @MinLength(8,{message:'Phone Number must be at least 8 characters'})
     phoneNumber: string;
+
+    @IsNotEmpty({message:'cnom is required'})
+    @Matches(/^[A-Za-z0-9\-]{4,20}$/, { message: 'CNOM must be alphanumeric (4–20 chars)' })
+    CNOM: string;
 
     @IsOptional()
     firstName?: string;
