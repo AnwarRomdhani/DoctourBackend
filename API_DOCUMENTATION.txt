@@ -1,0 +1,628 @@
+================================================================================
+                        DOCTOUR BACKEND API DOCUMENTATION
+================================================================================
+
+PROJECT NOTES
+-------------
+- All authenticated endpoints require the Authorization: Bearer <token> header
+- Patient IDs are automatically extracted from JWT tokens for patient-specific operations
+- CIN must be exactly 8 digits
+- Phone numbers must be at least 8 characters
+- Passwords must be at least 8 characters
+- The system uses a coin-based payment system with escrow (locked coins)
+- The system takes a 2% cut from doctor earnings
+- Cancellation policies:
+  * 3+ hours before: Full refund
+  * Less than 3 hours: 50/50 split (patient gets 50%, doctor gets 48%, system gets 2%)
+  * No-show (15+ min late): Patient gets 50%, doctor gets 48%, system gets 2%
+
+CODE FORMATTING
+---------------
+- Single quotes for strings
+- Trailing commas in objects and arrays
+
+================================================================================
+                            AUTHENTICATION APIs
+================================================================================
+
+1. LOGIN
+--------
+Endpoint: POST /auth/login
+Description: Authenticate user and receive JWT tokens. If 2FA is enabled, returns a flag requiring 2FA verification.
+
+Request Body:
+{
+  "email": "patient@example.com",
+  "password": "password123"
+}
+
+Response (without 2FA):
+{
+  "userId": 1,
+  "role": "PATIENT",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+
+Response (with 2FA enabled):
+{
+  "requires2FA": true,
+  "userId": 1
+}
+
+--------------------------------------------------------------------------------
+
+2. SETUP 2FA
+------------
+Endpoint: POST /auth/2fa/setup
+Description: Generate QR code and secret for 2FA setup. Requires JWT authentication.
+
+Headers:
+Authorization: Bearer <access_token>
+
+Request Body: None
+
+Response:
+{
+  "qrCode": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+  "secret": "JBSWY3DPEHPK3PXP"
+}
+
+--------------------------------------------------------------------------------
+
+3. VERIFY 2FA
+-------------
+Endpoint: POST /auth/2fa/verify
+Description: Verify 2FA token and enable 2FA for the user. Requires JWT authentication.
+
+Headers:
+Authorization: Bearer <access_token>
+
+Request Body:
+{
+  "token": "123456"
+}
+
+Response:
+{
+  "message": "2FA enabled successfully"
+}
+
+================================================================================
+                              PATIENT APIs
+================================================================================
+
+1. REGISTER PATIENT
+-------------------
+Endpoint: POST /patient/register
+Description: Create a new patient account.
+
+Request Body:
+{
+  "email": "patient@example.com",
+  "password": "password123",
+  "phoneNumber": "12345678",
+  "firstName": "John",
+  "lastName": "Doe",
+  "address": "123 Main St",
+  "cin": "12345678"
+}
+
+Response:
+{
+  "user": {
+    "id": 1,
+    "email": "patient@example.com",
+    "role": "PATIENT",
+    "firstName": "John",
+    "lastName": "Doe",
+    "phoneNumber": "12345678",
+    "address": "123 Main St",
+    "cin": "12345678",
+    "coinBalance": 0,
+    "lockedCoins": 0,
+    "is2FAEnabled": false,
+    "createdAt": "2024-01-19T10:00:00.000Z",
+    "updatedAt": "2024-01-19T10:00:00.000Z"
+  },
+  "patient": {
+    "userId": 1
+  }
+}
+
+--------------------------------------------------------------------------------
+
+2. GET ALL PATIENTS
+-------------------
+Endpoint: GET /patient
+Description: Retrieve list of all patients.
+
+Request Body: None
+
+Response:
+[
+  {
+    "userId": 1,
+    "user": {
+      "id": 1,
+      "email": "patient@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "phoneNumber": "12345678",
+      "address": "123 Main St",
+      "cin": "12345678",
+      "role": "PATIENT",
+      "coinBalance": 100.5,
+      "lockedCoins": 0
+    }
+  }
+]
+
+--------------------------------------------------------------------------------
+
+3. GET PATIENT BY ID
+--------------------
+Endpoint: GET /patient/:id
+Description: Retrieve a specific patient by user ID.
+Example: GET /patient/1
+
+Request Body: None
+
+Response:
+{
+  "userId": 1,
+  "user": {
+    "id": 1,
+    "email": "patient@example.com",
+    "firstName": "John",
+    "lastName": "Doe",
+    "phoneNumber": "12345678",
+    "address": "123 Main St",
+    "cin": "12345678",
+    "role": "PATIENT",
+    "coinBalance": 100.5,
+    "lockedCoins": 0
+  }
+}
+
+--------------------------------------------------------------------------------
+
+4. UPDATE PATIENT
+-----------------
+Endpoint: PATCH /patient/:id
+Description: Update patient information.
+Example: PATCH /patient/1
+
+Request Body:
+{
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "address": "456 Oak Ave"
+}
+
+Response:
+{
+  "id": 1,
+  "email": "patient@example.com",
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "phoneNumber": "12345678",
+  "address": "456 Oak Ave",
+  "cin": "12345678",
+  "role": "PATIENT",
+  "coinBalance": 100.5,
+  "lockedCoins": 0,
+  "updatedAt": "2024-01-19T11:00:00.000Z"
+}
+
+--------------------------------------------------------------------------------
+
+5. DELETE PATIENT
+-----------------
+Endpoint: DELETE /patient/:id
+Description: Delete a patient account.
+Example: DELETE /patient/1
+
+Request Body: None
+
+Response:
+{
+  "id": 1,
+  "email": "patient@example.com",
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "role": "PATIENT"
+}
+
+================================================================================
+                              DOCTOR APIs
+================================================================================
+
+1. REGISTER DOCTOR
+------------------
+Endpoint: POST /doctor/register
+Description: Create a new doctor account.
+
+Request Body:
+{
+  "email": "doctor@example.com",
+  "password": "password123",
+  "phoneNumber": "87654321",
+  "CNOM": "DOC12345",
+  "firstName": "Dr. Sarah",
+  "lastName": "Johnson",
+  "address": "789 Medical Plaza",
+  "cin": "87654321"
+}
+
+Response:
+{
+  "user": {
+    "id": 2,
+    "email": "doctor@example.com",
+    "role": "DOCTOR",
+    "firstName": "Dr. Sarah",
+    "lastName": "Johnson",
+    "phoneNumber": "87654321",
+    "address": "789 Medical Plaza",
+    "cin": "87654321",
+    "CNOM": "DOC12345",
+    "coinBalance": 0,
+    "lockedCoins": 0,
+    "is2FAEnabled": false,
+    "createdAt": "2024-01-19T10:00:00.000Z",
+    "updatedAt": "2024-01-19T10:00:00.000Z"
+  },
+  "doctor": {
+    "userId": 2,
+    "consultationPrice": 0
+  }
+}
+
+--------------------------------------------------------------------------------
+
+2. GET ALL DOCTORS
+------------------
+Endpoint: GET /doctor
+Description: Retrieve list of all doctors.
+
+Request Body: None
+
+Response:
+[
+  {
+    "userId": 2,
+    "consultationPrice": 50,
+    "user": {
+      "id": 2,
+      "email": "doctor@example.com",
+      "firstName": "Dr. Sarah",
+      "lastName": "Johnson",
+      "phoneNumber": "87654321",
+      "address": "789 Medical Plaza",
+      "cin": "87654321",
+      "CNOM": "DOC12345",
+      "role": "DOCTOR",
+      "coinBalance": 200.75,
+      "lockedCoins": 0
+    }
+  }
+]
+
+--------------------------------------------------------------------------------
+
+3. GET DOCTOR BY ID
+-------------------
+Endpoint: GET /doctor/:id
+Description: Retrieve a specific doctor by user ID.
+Example: GET /doctor/2
+
+Request Body: None
+
+Response:
+{
+  "userId": 2,
+  "consultationPrice": 50,
+  "user": {
+    "id": 2,
+    "email": "doctor@example.com",
+    "firstName": "Dr. Sarah",
+    "lastName": "Johnson",
+    "phoneNumber": "87654321",
+    "address": "789 Medical Plaza",
+    "cin": "87654321",
+    "CNOM": "DOC12345",
+    "role": "DOCTOR",
+    "coinBalance": 200.75,
+    "lockedCoins": 0
+  }
+}
+
+--------------------------------------------------------------------------------
+
+4. UPDATE DOCTOR
+----------------
+Endpoint: PATCH /doctor/:id
+Description: Update doctor information.
+Example: PATCH /doctor/2
+
+Request Body:
+{
+  "firstName": "Dr. Michael",
+  "lastName": "Brown",
+  "address": "321 Hospital Road"
+}
+
+Response:
+{
+  "id": 2,
+  "email": "doctor@example.com",
+  "firstName": "Dr. Michael",
+  "lastName": "Brown",
+  "phoneNumber": "87654321",
+  "address": "321 Hospital Road",
+  "cin": "87654321",
+  "CNOM": "DOC12345",
+  "role": "DOCTOR",
+  "coinBalance": 200.75,
+  "lockedCoins": 0,
+  "updatedAt": "2024-01-19T12:00:00.000Z"
+}
+
+--------------------------------------------------------------------------------
+
+5. DELETE DOCTOR
+----------------
+Endpoint: DELETE /doctor/:id
+Description: Delete a doctor account.
+Example: DELETE /doctor/2
+
+Request Body: None
+
+Response:
+{
+  "id": 2,
+  "email": "doctor@example.com",
+  "firstName": "Dr. Michael",
+  "lastName": "Brown",
+  "role": "DOCTOR"
+}
+
+================================================================================
+                           CONSULTATION APIs
+================================================================================
+
+1. SCHEDULE CONSULTATION (DIRECT)
+----------------------------------
+Endpoint: POST /consultation/schedule
+Description: Patient directly schedules and pays for a consultation. Requires JWT authentication (PATIENT role only).
+
+Headers:
+Authorization: Bearer <access_token>
+
+Request Body:
+{
+  "patientId": 1,
+  "doctorId": 2,
+  "scheduledAt": "2024-01-25T14:00:00.000Z"
+}
+
+Response:
+{
+  "id": 1,
+  "patientId": 1,
+  "doctorId": 2,
+  "scheduledAt": "2024-01-25T14:00:00.000Z",
+  "startedAt": null,
+  "endedAt": null,
+  "status": "RESERVED",
+  "priceCoins": 50,
+  "createdAt": "2024-01-19T10:00:00.000Z"
+}
+
+--------------------------------------------------------------------------------
+
+2. REQUEST CONSULTATION
+-----------------------
+Endpoint: POST /consultation/request
+Description: Patient requests a consultation without immediate payment. Doctor must approve. Requires JWT authentication (PATIENT role only).
+
+Headers:
+Authorization: Bearer <access_token>
+
+Request Body:
+{
+  "doctorId": 2,
+  "scheduledAt": "2024-01-25T15:00:00.000Z"
+}
+
+Response:
+{
+  "id": 2,
+  "patientId": 1,
+  "doctorId": 2,
+  "scheduledAt": "2024-01-25T15:00:00.000Z",
+  "startedAt": null,
+  "endedAt": null,
+  "status": "REQUESTED",
+  "priceCoins": 50,
+  "createdAt": "2024-01-19T10:30:00.000Z"
+}
+
+--------------------------------------------------------------------------------
+
+3. APPROVE CONSULTATION
+-----------------------
+Endpoint: PATCH /consultation/approve
+Description: Doctor approves a requested consultation and locks patient funds. Requires JWT authentication (DOCTOR role only).
+
+Headers:
+Authorization: Bearer <access_token>
+
+Request Body:
+{
+  "consultationId": 2
+}
+
+Response:
+{
+  "id": 2,
+  "patientId": 1,
+  "doctorId": 2,
+  "scheduledAt": "2024-01-25T15:00:00.000Z",
+  "startedAt": null,
+  "endedAt": null,
+  "status": "RESERVED",
+  "priceCoins": 50,
+  "createdAt": "2024-01-19T10:30:00.000Z"
+}
+
+--------------------------------------------------------------------------------
+
+4. UPDATE CONSULTATION STATUS
+------------------------------
+Endpoint: PATCH /consultation/status
+Description: Doctor updates the status of a consultation. Requires JWT authentication (DOCTOR role only).
+
+Headers:
+Authorization: Bearer <access_token>
+
+Request Body:
+{
+  "consultationId": 1,
+  "status": "ACTIVE"
+}
+
+Possible Status Values:
+- REQUESTED
+- RESERVED
+- ACTIVE
+- COMPLETED
+- CANCELLED
+- NO_SHOW
+
+Response:
+{
+  "id": 1,
+  "patientId": 1,
+  "doctorId": 2,
+  "scheduledAt": "2024-01-25T14:00:00.000Z",
+  "startedAt": null,
+  "endedAt": null,
+  "status": "ACTIVE",
+  "priceCoins": 50,
+  "createdAt": "2024-01-19T10:00:00.000Z"
+}
+
+--------------------------------------------------------------------------------
+
+5. CANCEL CONSULTATION
+----------------------
+Endpoint: PATCH /consultation/cancel/:id
+Description: Patient cancels a consultation. Full refund if cancelled 3+ hours before, 50/50 split if less. Requires JWT authentication (PATIENT role only).
+
+Headers:
+Authorization: Bearer <access_token>
+
+Example: PATCH /consultation/cancel/1
+
+Request Body: None
+
+Response (Full Refund):
+{
+  "id": 1,
+  "patientId": 1,
+  "doctorId": 2,
+  "scheduledAt": "2024-01-25T14:00:00.000Z",
+  "startedAt": null,
+  "endedAt": null,
+  "status": "CANCELLED",
+  "priceCoins": 50,
+  "createdAt": "2024-01-19T10:00:00.000Z"
+}
+
+Response (Late Cancel - 50/50 Split):
+{
+  "id": 1,
+  "patientId": 1,
+  "doctorId": 2,
+  "scheduledAt": "2024-01-25T14:00:00.000Z",
+  "startedAt": null,
+  "endedAt": null,
+  "status": "CANCELLED",
+  "priceCoins": 50,
+  "createdAt": "2024-01-19T10:00:00.000Z"
+}
+
+--------------------------------------------------------------------------------
+
+6. SEND MESSAGE
+---------------
+Endpoint: POST /consultation/message
+Description: Send a message within a consultation. Requires JWT authentication (PATIENT or DOCTOR role).
+
+Headers:
+Authorization: Bearer <access_token>
+
+Request Body:
+{
+  "consultationId": 1,
+  "content": "Hello doctor, I have a question about my symptoms."
+}
+
+Response:
+{
+  "id": 1,
+  "consultationId": 1,
+  "senderId": 1,
+  "content": "Hello doctor, I have a question about my symptoms.",
+  "createdAt": "2024-01-19T14:30:00.000Z"
+}
+
+================================================================================
+                           BACKGROUND JOBS
+================================================================================
+
+NO-SHOW CONSULTATION HANDLER (CRON JOB)
+----------------------------------------
+Schedule: Runs every minute (*/1 * * * *)
+Description: Automatically processes consultations that are RESERVED but 15+ minutes past the scheduled time. Refunds 50% to patient, pays 48% to doctor (after 2% system cut).
+
+No API endpoint - This runs automatically in the background via ConsultationCron.
+
+================================================================================
+                           ERROR RESPONSES
+================================================================================
+
+All endpoints may return the following error responses:
+
+400 Bad Request:
+{
+  "statusCode": 400,
+  "message": "Insufficient coin balance",
+  "error": "Bad Request"
+}
+
+401 Unauthorized:
+{
+  "statusCode": 401,
+  "message": "Unauthorized"
+}
+
+403 Forbidden:
+{
+  "statusCode": 403,
+  "message": "You are not part of this consultation",
+  "error": "Forbidden"
+}
+
+404 Not Found:
+{
+  "statusCode": 404,
+  "message": "Consultation not found",
+  "error": "Not Found"
+}
+
+================================================================================
+                              END OF DOCUMENTATION
+================================================================================

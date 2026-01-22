@@ -21,10 +21,11 @@ model User {
   lastName    String?
   phoneNumber String   @unique
   address     String?
-  cin         String?  @unique
   role        UserRole
-  CNOM        String?  @unique
+
+  // Wallet (Refactor)
   coinBalance Float    @default(0)
+  lockedCoins Float    @default(0)
   
 
   is2FAEnabled Boolean @default(false)
@@ -36,6 +37,13 @@ model User {
   patient Patient?
   doctor  Doctor?
 
+
+  consultationsAsPatient Consultation[] @relation("PatientConsultations")
+  consultationsAsDoctor  Consultation[] @relation("DoctorConsultations")
+
+  ledgerSent    Ledger[] @relation("LedgerFrom")
+  ledgerReceived Ledger[] @relation("LedgerTo")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -43,14 +51,122 @@ model User {
 enum UserRole {
   PATIENT
   DOCTOR
+  SYSTEM
 }
 
 model Patient {
   userId Int  @id
   user   User @relation(fields: [userId], references: [id])
+
+  cin String @unique
 }
 
 model Doctor {
   userId Int  @id
   user   User @relation(fields: [userId], references: [id])
+
+  consultationPrice Int @default(0)
+
+  kyc DoctorKYC?
+}
+
+model DoctorKYC{
+  id Int @id @default(autoincrement())
+
+  doctorId Int @unique
+
+  doctor Doctor @relation(fields: [doctorId], references: [userId])
+
+  cinNumber String @unique
+  cinFrontImageUrl String
+  cinBackImageUrl String
+  cnomProofUrl String
+
+  status KYCStatus @default(PENDING)
+  rejectionReason String?
+
+
+  submittedAt DateTime @default(now())
+  reviewedAt DateTime?
+}
+
+enum KYCStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model Consultation{
+  id Int @id @default(autoincrement())
+  patientId Int
+  doctorId Int
+
+  scheduledAt DateTime
+
+  startedAt DateTime?
+  endedAt DateTime?
+
+  status ConsultationStatus
+
+  priceCoins Int @default(0)
+
+  messages Message[]
+
+  patient User @relation("PatientConsultations", fields: [patientId], references: [id])
+  doctor User @relation("DoctorConsultations", fields: [doctorId], references: [id])
+
+
+  ledgerEntries Ledger[]
+
+  createdAt DateTime @default(now())
+}
+
+
+enum ConsultationStatus {
+  REQUESTED
+  RESERVED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model Message {
+  id Int @id @default(autoincrement())
+
+  consultationId Int
+  senderId Int
+
+  content String
+
+  createdAt DateTime @default(now())
+
+  consultation Consultation @relation(fields: [consultationId], references: [id])
+}
+
+
+model Ledger {
+  id            Int       @id @default(autoincrement())
+  consultationId Int?     // optional, because not all ledger entries may be tied to a consultation
+  fromUserId    Int?      // who the coins came from (can be null for system initial credit)
+  toUserId      Int       // who receives the coins
+  type          LedgerType // type of transaction (refund, earnings, system cut, etc.)
+  amount        Float      // number of coins transferred
+  createdAt     DateTime   @default(now())
+  settled       Boolean    @default(false)
+  externalRef   String?
+
+  // Relations
+  consultation  Consultation? @relation(fields: [consultationId], references: [id])
+  fromUser      User?        @relation("LedgerFrom", fields: [fromUserId], references: [id])
+  toUser        User         @relation("LedgerTo", fields: [toUserId], references: [id])
+}
+
+enum LedgerType {
+  PAYMENT        // Patient paid for consultation
+  REFUND         // Patient got coins back (cancel before 3h)
+  NO_SHOW_REFUND // Patient partially refunded after no-show
+  DOCTOR_EARNINGS // Coins earned by doctor
+  SYSTEM_CUT     // 2% cut of doctor earnings
+  LATE_CANCEL
 }
